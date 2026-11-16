@@ -45,6 +45,16 @@ final class ConverterTests: XCTestCase {
         XCTAssertEqual(m4a.lastPathComponent, "ses.m4a")
         XCTAssert((try FileManager.default.attributesOfItem(atPath: m4a.path)[.size] as? Int ?? 0) > 100)
     }
+    func testPdfToPngAndText() async throws {
+        let txt = dir.appendingPathComponent("kaynak.txt")
+        try String(repeating: "Merhaba\n", count: 120).write(to: txt, atomically: true, encoding: .utf8)
+        let pdf = try await Converter().convert(txt, option: opt(txt, "txt-pdf"))
+        let png = try await Converter().convert(pdf, option: opt(pdf, "pdf-png"))
+        XCTAssertEqual(png.lastPathComponent, "kaynak (sayfa 1).png")
+        XCTAssertEqual(try Data(contentsOf: png).prefix(4), Data([0x89, 0x50, 0x4E, 0x47]))
+        let text = try await Converter().convert(pdf, option: opt(pdf, "pdf-txt"))
+        XCTAssert(try String(contentsOf: text, encoding: .utf8).contains("Merhaba"))
+    }
     func testUnsupported() async {
         let src = dir.appendingPathComponent("a.xyz")
         do {
