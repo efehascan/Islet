@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Snapshot.runIfRequested() { return }
         controller = IslandPanelController(store: store)
         controller?.show()
+        if CommandLine.arguments.contains("--selftest") { controller?.selfTest(); return }
         store.start()
     }
 }
