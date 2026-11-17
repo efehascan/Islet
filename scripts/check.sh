@@ -17,6 +17,6 @@ fi
 if [ -n "$1" ]; then out=$(swift test --filter "$1" 2>&1); else out=$(swift test 2>&1); fi; code=$?
 if [ $code -ne 0 ]; then
   # Sadece beklenen/gerçek değeri gösteren satırlar: model neyin yanlış olduğunu görsün
-  echo "test: BAŞARISIZ"; echo "$out" | grep -E "error:" | sed -e 's|^.*/Tests/|Tests/|' -e 's|-\[AdaCoreTests\.||' -e 's|\] : | : |' | head -15; exit 1
+  echo "test: BAŞARISIZ"; echo "$out" | grep -E "error:" | sed -e 's|^.*/Tests/|Tests/|' -e 's|-\[IsletCoreTests\.||' -e 's|\] : | : |' | head -15; exit 1
 fi
 echo "test: OK"

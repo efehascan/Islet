@@ -1,6 +1,6 @@
 import SwiftUI
 import AppKit
-import AdaCore
+import IsletCore
 
 /// Klavye odağı alabilen (düğmeler çalışsın) ama uygulamayı öne getirmeyen panel.
 final class IslandPanel: NSPanel {
@@ -145,7 +145,7 @@ final class IslandPanelController {
                 try? await Task.sleep(for: .milliseconds(400))
             }
             step(onIsland, 0.4)
-            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ada-selftest.txt")
+            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("islet-selftest.txt")
             try? "selftest".write(to: tmp, atomically: true, encoding: .utf8)
             store.handleDrop(tmp)
             try? await Task.sleep(for: .milliseconds(700))

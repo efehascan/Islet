@@ -1,6 +1,6 @@
 import Foundation
 
-/// Ada'nın bütün veri tipleri. Arayüz sadece bunları okur. Değiştirilmez.
+/// Islet'in bütün veri tipleri. Arayüz sadece bunları okur. Değiştirilmez.
 
 public struct NowPlayingInfo: Equatable, Sendable {
     public var app: String          // "Spotify" ya da "Music"

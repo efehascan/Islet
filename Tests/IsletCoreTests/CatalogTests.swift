@@ -1,5 +1,5 @@
 import XCTest
-@testable import AdaCore
+@testable import IsletCore
 
 final class CatalogTests: XCTestCase {
     func ids(_ name: String, ffmpeg: Bool = false) -> [String] {

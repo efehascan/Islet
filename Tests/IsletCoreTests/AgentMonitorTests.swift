@@ -1,5 +1,5 @@
 import XCTest
-@testable import AdaCore
+@testable import IsletCore
 
 final class AgentMonitorTests: XCTestCase {
     func testProcesses() {

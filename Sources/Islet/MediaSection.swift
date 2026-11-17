@@ -1,5 +1,5 @@
 import SwiftUI
-import AdaCore
+import IsletCore
 
 /// Görev: MediaSection (şu an yer tutucu).
 struct MediaSection: View {

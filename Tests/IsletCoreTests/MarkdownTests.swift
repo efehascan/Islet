@@ -1,5 +1,5 @@
 import XCTest
-@testable import AdaCore
+@testable import IsletCore
 
 final class MarkdownTests: XCTestCase {
     func body(_ md: String) -> String {

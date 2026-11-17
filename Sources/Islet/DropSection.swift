@@ -1,6 +1,6 @@
 import SwiftUI
 import AppKit
-import AdaCore
+import IsletCore
 
 /// Görev: açık adadaki dosya bırakma ve dönüştürme alanı.
 struct DropSection: View {

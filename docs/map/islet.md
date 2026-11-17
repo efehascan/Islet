@@ -1,8 +1,8 @@
-# Harita: Ada
+# Harita: Islet
 son doğrulama: (ilk commit)
 
 ## Dosyalar
-- `Sources/AdaCore/Models.swift`: `NowPlayingInfo`, `MediaCommand`, `AgentKind`, `AgentActivity`, `FileKind`, `ConversionTool`, `ConversionOption`, `ConversionStatus`, `ConversionError`. Değiştirilmez.
+- `Sources/IsletCore/Models.swift`: `NowPlayingInfo`, `MediaCommand`, `AgentKind`, `AgentActivity`, `FileKind`, `ConversionTool`, `ConversionOption`, `ConversionStatus`, `ConversionError`. Değiştirilmez.
 - `Markdown.swift`: `Markdown.html(_:title:)` → tam HTML belgesi.
 - `ConversionCatalog.swift`: `kind(forExtension:)`, `options(for:ffmpegAvailable:)`.
 - `OutputPath.swift`: `OutputPath.make(for:ext:)` → kaynağın klasöründe, çakışmayan ad ("Ad.pdf", "Ad (1).pdf", …).
@@ -10,7 +10,7 @@ son doğrulama: (ilk commit)
 - `NowPlayingProvider.swift`: `current()`, `send(_:to:)`, `static parse(_:app:)`.
 - `AgentMonitor.swift`: `sample() async`, `static parseProcesses(_:)`, `static parseProxyStats(_:now:)`.
 - `IslandStore.swift`: `@MainActor @Observable`; medya, ajanlar, bırakılan dosya, seçenekler, durum.
-- Arayüz (`Sources/Ada/`): `AdaApp` (AppDelegate), `IslandPanelController` (NSPanel, boyut isExpanded'a göre), `Theme` (renkler, ölçüler), `IslandView` (kapalı/açık ada), `MediaSection`, `AgentsSection`, `DropSection`, `Snapshot`.
+- Arayüz (`Sources/Islet/`): `IsletApp` (AppDelegate), `IslandPanelController` (NSPanel, boyut isExpanded'a göre), `Theme` (renkler, ölçüler), `IslandView` (kapalı/açık ada), `MediaSection`, `AgentsSection`, `DropSection`, `Snapshot`.
 
 ## Dönüştürme kuralları
 - Seçenek kimliği "<kaynak uzantısı küçük harf>-<hedef>", başlık hedefin büyük harfi ("PDF"), outputExtension hedef.
@@ -44,4 +44,4 @@ son doğrulama: (ilk commit)
 ## Pencere (değişmez kural)
 - Pencere boyutu sabittir (açık ada kadar) ve hiç değişmez; ada `IslandRoot` içinde SwiftUI ile büyür/küçülür. Pencereyi yeniden boyutlandırmak AppKit'te kısıt döngüsü çökmesine yol açtı.
 - Fare takibi 0,1 sn'lik zamanlayıcıyla (`IslandPanelController.tick`); ada kapalıyken pencere `ignoresMouseEvents = true` (alttaki her şey tıklanır).
-- Arayüz değişikliğinden sonra `Ada --selftest` çalıştır.
+- Arayüz değişikliğinden sonra `Islet --selftest` çalıştır.

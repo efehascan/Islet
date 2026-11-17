@@ -1,18 +1,18 @@
-# Ada
+# Islet
 
 Çentiğin altında yaşayan dinamik ada (macOS 26+): şu an çalan müzik (Spotify, Müzik) ve kontrolleri, çalışan yapay zekâ ajanlarının durumu, üstüne bırakılan dosyayı başka biçime dönüştürüp yanına kaydetme. Swift 6.4 araç zinciri, Swift 5 dil modu, SwiftUI + AppKit. Dış bağımlılık yok; dönüştürmede makinedeki araçlar (textutil, cupsfilter, sips, afconvert, avconvert, PDFKit; varsa ffmpeg).
 
 ## Komutlar
 - Kontrol: `scripts/check.sh` (derleme + bütün testler), tek grup: `scripts/check.sh CatalogTests`
-- Çalıştır: `swift run Ada` · Paket: `scripts/make-app.sh` → `dist/Ada.app`
-- Görsel kontrol: `.build/debug/Ada --snapshot ada.png [--file örnek.docx]`
+- Çalıştır: `swift run Islet` · Paket: `scripts/make-app.sh` → `dist/Islet.app`
+- Görsel kontrol: `.build/debug/Islet --snapshot islet.png [--file örnek.docx]`
 - Komut çalıştıramıyorsan kontrolü kullanıcıya bırak; "geçti" deme.
 
 ## Klasörler
-- `Sources/AdaCore/`: veri tipleri (`Models.swift`), Markdown, dönüştürme kataloğu, çıktı yolu, dönüştürücü, şu an çalan, ajan izleyici, `IslandStore`. Arayüz yok.
-- `Sources/Ada/`: pencere (`IslandPanelController`), görünümler, tema.
-- `Tests/AdaCoreTests/`: davranışı tanımlayan testler.
-- Harita: `docs/map/ada.md`. Bir dosyaya dokunmadan önce oku.
+- `Sources/IsletCore/`: veri tipleri (`Models.swift`), Markdown, dönüştürme kataloğu, çıktı yolu, dönüştürücü, şu an çalan, ajan izleyici, `IslandStore`. Arayüz yok.
+- `Sources/Islet/`: pencere (`IslandPanelController`), görünümler, tema.
+- `Tests/IsletCoreTests/`: davranışı tanımlayan testler.
+- Harita: `docs/map/islet.md`. Bir dosyaya dokunmadan önce oku.
 
 ## Kurallar
 - Sadece görevin izin verdiği dosyaya dokun. Görev tek dosyaysa tek dosyaya.

@@ -1,5 +1,5 @@
 import SwiftUI
-import AdaCore
+import IsletCore
 
 /// Görev: adanın kendisi; kapalı/açık durum, fareyle açılma, dosya bırakma.
 struct IslandView: View {

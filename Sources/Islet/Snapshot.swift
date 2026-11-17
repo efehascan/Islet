@@ -1,8 +1,8 @@
 import SwiftUI
 import AppKit
-import AdaCore
+import IsletCore
 
-/// `Ada --snapshot <yol.png>`: açık (genişletilmiş) adayı örnek verilerle PNG olarak çizer ve çıkar.
+/// `Islet --snapshot <yol.png>`: açık (genişletilmiş) adayı örnek verilerle PNG olarak çizer ve çıkar.
 /// Ajanların arayüzü görsel kontrol etmesi için (ekran kaydı izni gerekmez).
 enum Snapshot {
     @MainActor static func runIfRequested() -> Bool {

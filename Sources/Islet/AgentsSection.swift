@@ -1,5 +1,5 @@
 import SwiftUI
-import AdaCore
+import IsletCore
 
 /// Görev: açık adadaki ajan listesi.
 struct AgentsSection: View {

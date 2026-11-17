@@ -1,9 +1,9 @@
 import SwiftUI
 import AppKit
-import AdaCore
+import IsletCore
 
 @main
-struct AdaApp: App {
+struct IsletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene { Settings { EmptyView() } }
 }

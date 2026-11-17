@@ -1,11 +1,11 @@
 import XCTest
-@testable import AdaCore
+@testable import IsletCore
 
 /// Gerçek dönüştürmeler: makinedeki textutil, cupsfilter, sips, afconvert, say ile.
 final class ConverterTests: XCTestCase {
     var dir: URL!
     override func setUpWithError() throws {
-        dir = FileManager.default.temporaryDirectory.appendingPathComponent("ada-" + UUID().uuidString)
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("islet-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     }
     func opt(_ url: URL, _ id: String) -> ConversionOption {

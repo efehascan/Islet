@@ -1,9 +1,9 @@
 import XCTest
-@testable import AdaCore
+@testable import IsletCore
 
 final class StoreTests: XCTestCase {
     @MainActor func testDropAndConvert() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ada-store-" + UUID().uuidString)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("islet-store-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let src = dir.appendingPathComponent("not.txt")
         try "selam".write(to: src, atomically: true, encoding: .utf8)
