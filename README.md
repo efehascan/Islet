@@ -10,6 +10,7 @@ swift run Ada
 scripts/make-app.sh      # dist/Ada.app
 scripts/check.sh         # derleme + testler
 .build/debug/Ada --snapshot ada.png [--file örnek.docx] [--live]   # görsel kontrol
+.build/debug/Ada --selftest   # adayı sahte fareyle açıp kapar, dosya bırakır; çökme ve pencere kontrolü
 ```
 
 Vardiya Mimarisi ile geliştirildi: Claude iskeleti yazdı, Qwen 3.8 (local) dosyaları doldurdu, kontroller ve Gemma incelemesi doğruladı.

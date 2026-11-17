@@ -40,3 +40,8 @@ son doğrulama: (ilk commit)
 ## Arayüz
 - Ada siyah (çentikle birleşir), yazılar beyaz. Kapalı: ince hap (sol: çalan parça kapağı ya da ajan noktası, sağ: dalga ya da ajan sayısı). Açık: üst satır medya, altında ajanlar ve bırakma alanı.
 - Fare üstüne gelince açılır, çıkınca kapanır (dönüştürme sürüyorsa kapanmaz). Dosya sürüklenince açılır.
+
+## Pencere (değişmez kural)
+- Pencere boyutu sabittir (açık ada kadar) ve hiç değişmez; ada `IslandRoot` içinde SwiftUI ile büyür/küçülür. Pencereyi yeniden boyutlandırmak AppKit'te kısıt döngüsü çökmesine yol açtı.
+- Fare takibi 0,1 sn'lik zamanlayıcıyla (`IslandPanelController.tick`); ada kapalıyken pencere `ignoresMouseEvents = true` (alttaki her şey tıklanır).
+- Arayüz değişikliğinden sonra `Ada --selftest` çalıştır.

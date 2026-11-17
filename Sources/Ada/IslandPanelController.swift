@@ -2,32 +2,44 @@ import SwiftUI
 import AppKit
 import AdaCore
 
-/// Fare izleme alanı her zaman etkin olan barındırıcı: odak almayan pencerede SwiftUI'ın
-/// onHover'ı güvenilir değil, giriş/çıkışı burada yakalıyoruz.
-final class HoverHostingView<Content: View>: NSHostingView<Content> {
-    var onHover: ((Bool) -> Void)?
-    private var area: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let area { removeTrackingArea(area) }
-        let a = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(a); area = a
-    }
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
+/// Klavye odağı alabilen (düğmeler çalışsın) ama uygulamayı öne getirmeyen panel.
+final class IslandPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }
 
-/// Çentiğin altında duran, odak çalmayan, bütün masaüstlerinde görünen pencere.
-/// Boyutu adanın durumuna göre değişir; kapalıyken sadece ada kadar yer kaplar.
+/// Adayı sabit boyutlu pencerenin üst ortasına yerleştirir; ada bu görünümün içinde büyüyüp küçülür.
+struct IslandRoot: View {
+    let store: IslandStore
+    let collapsed: CGSize
+
+    var body: some View {
+        IslandView(store: store)
+            .frame(width: store.isExpanded ? Theme.expandedSize.width : collapsed.width,
+                   height: store.isExpanded ? Theme.expandedSize.height : collapsed.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.isExpanded)
+    }
+}
+
+/// Çentiğin altında duran, bütün masaüstlerinde görünen pencere.
+///
+/// Pencerenin boyutu HİÇ değişmez (açık adanın boyutu kadardır). Pencereyi her açılıp kapanmada
+/// yeniden boyutlandırmak, SwiftUI içeriğiyle birlikte AppKit'te "Update Constraints" döngüsüne ve
+/// çökmeye yol açıyordu. Ada kapalıyken pencere fare olaylarını yok sayar (alttaki her şey tıklanır);
+/// fare adanın üstüne gelince olayları kabul eder ve ada açılır.
 @MainActor
 final class IslandPanelController {
     private let store: IslandStore
-    private let panel: NSPanel
+    private let panel: IslandPanel
+    private var timer: Timer?
+    private var collapsed = CGSize(width: 220, height: 32)
+    /// Fare konumu (ekran koordinatı). Testte sahte konum verilebilir.
+    var mouseLocation: () -> CGPoint = { NSEvent.mouseLocation }
 
     init(store: IslandStore) {
         self.store = store
-        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -35,50 +47,91 @@ final class IslandPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.isMovable = false
-        panel.acceptsMouseMovedEvents = true
-        let host = HoverHostingView(rootView: IslandView(store: store))
-        // Barındırıcı pencereye boyut kısıtı koymasın: pencereyi biz boyutlandırıyoruz.
-        // (Varsayılan kısıtlar, boyut değişirken AppKit'te kısıt döngüsü çökmesine yol açıyordu.)
-        host.sizingOptions = []
-        host.onHover = { [weak store] inside in
-            guard let store else { return }
-            if inside { store.isExpanded = true; return }
-            if case .running = store.status { return }   // dönüştürme sürerken kapanma
-            store.isExpanded = false
-        }
-        panel.contentView = host
+        panel.ignoresMouseEvents = true
     }
 
     func show() {
-        layout()
+        place()
         panel.orderFrontRegardless()
-        observe()
-    }
-
-    private func observe() {
-        withObservationTracking { _ = store.isExpanded } onChange: { [weak self] in
-            Task { @MainActor in self?.layout(); self?.observe() }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.place() }
         }
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
-    private func layout() {
+    /// Pencereyi ekranın üst ortasına, açık ada boyutunda yerleştirir (açılışta ve ekran değişince).
+    private func place() {
         guard let screen = NSScreen.main else { return }
-        let size = store.isExpanded ? Theme.expandedSize : Theme.collapsedSize(for: screen)
-        let frame = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
-                           width: size.width, height: size.height)
-        panel.setFrame(frame, display: true)
+        collapsed = Theme.collapsedSize(for: screen)
+        let size = Theme.expandedSize
+        let host = NSHostingView(rootView: IslandRoot(store: store, collapsed: collapsed))
+        host.sizingOptions = []          // pencere boyutunu içerik belirlemez
+        panel.contentView = host
+        panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+                              width: size.width, height: size.height), display: true)
     }
 
-    /// `--selftest`: açıp kapamayı birkaç kez dener; çökmezse 0 ile çıkar.
+    /// Adanın şu anki dikdörtgeni (ekran koordinatı): kapalıyken hap, açıkken bütün pencere.
+    private var islandRect: NSRect {
+        let f = panel.frame
+        if store.isExpanded { return f }
+        return NSRect(x: f.midX - collapsed.width / 2, y: f.maxY - collapsed.height, width: collapsed.width, height: collapsed.height)
+    }
+
+    /// Fare adanın üstündeyse açar ve olayları kabul eder; değilse kapatır ve olayları alttakilere bırakır.
+    func tick() {
+        let inside = islandRect.contains(mouseLocation())
+        var keepOpen = false
+        if case .running = store.status { keepOpen = true }       // dönüştürme sürerken kapanma
+        let shouldExpand = inside || keepOpen
+        if store.isExpanded != shouldExpand { store.isExpanded = shouldExpand }
+        let ignore = !shouldExpand
+        if panel.ignoresMouseEvents != ignore { panel.ignoresMouseEvents = ignore }
+    }
+
+    /// `--selftest`: gerçek veriler yüklüyken sahte fare konumuyla adayı açıp kapar, dosya bırakır;
+    /// pencere boyutunun değişmediğini ve kapalıyken tıklamaları geçirdiğini doğrular. Çökmezse 0 ile çıkar.
     func selfTest() {
+        store.start()
+        timer?.invalidate()
         Task { @MainActor in
-            for i in 0..<8 {
-                try? await Task.sleep(for: .milliseconds(400))
-                store.isExpanded = (i % 2 == 0)
+            var failures: [String] = []
+            let frame0 = panel.frame
+            let onIsland = CGPoint(x: frame0.midX, y: frame0.maxY - 5)
+            let below = CGPoint(x: frame0.midX, y: frame0.minY + 20)       // kapalıyken saydam bölge
+            let away = CGPoint(x: frame0.minX - 300, y: frame0.minY - 300)
+            try? await Task.sleep(for: .milliseconds(2500))                 // ajanlar ve medya yüklensin
+            for i in 0..<10 {
+                mouseLocation = { i % 2 == 0 ? onIsland : away }
+                tick()
+                if store.isExpanded != (i % 2 == 0) { failures.append("tur \(i): isExpanded \(store.isExpanded)") }
+                if panel.ignoresMouseEvents != (i % 2 != 0) { failures.append("tur \(i): ignoresMouseEvents \(panel.ignoresMouseEvents)") }
+                try? await Task.sleep(for: .milliseconds(450))
             }
-            try? await Task.sleep(for: .milliseconds(500))
-            print("selftest: OK, son çerçeve \(panel.frame)")
-            exit(0)
+            mouseLocation = { below }; tick()
+            if store.isExpanded { failures.append("kapalıyken alt bölge adayı açtı") }
+            mouseLocation = { onIsland }; tick()
+            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ada-selftest.txt")
+            try? "selftest".write(to: tmp, atomically: true, encoding: .utf8)
+            store.handleDrop(tmp)
+            try? await Task.sleep(for: .milliseconds(700))
+            if store.options.isEmpty { failures.append("bırakılan dosya için seçenek yok") }
+            mouseLocation = { below }; tick()                               // açıkken alt bölge adanın içi
+            if !store.isExpanded { failures.append("açıkken ada içinde kapandı") }
+            store.clearDrop()
+            mouseLocation = { away }; tick()
+            try? await Task.sleep(for: .milliseconds(700))
+            if panel.frame != frame0 { failures.append("pencere boyutu değişti: \(panel.frame)") }
+            if failures.isEmpty {
+                print("selftest: OK · ajan \(store.agents.count) · pencere \(Int(frame0.width))×\(Int(frame0.height)) sabit")
+                exit(0)
+            }
+            print("selftest: BAŞARISIZ\n" + failures.joined(separator: "\n"))
+            exit(1)
         }
     }
 }
