@@ -18,7 +18,7 @@ final class AgentMonitorTests: XCTestCase {
         let a = AgentMonitor.parseProcesses(ps, subagents: 2)
         XCTAssertEqual(a.map(\.kind), [.claude, .agentRun, .opencode])
         XCTAssertEqual(a[0].name, "Claude Code")
-        XCTAssertEqual(a[0].detail, "1 çalışıyor · 2 subagent")
+        XCTAssertEqual(a[0].detail, "1 çalışıyor · 2 görev")
         XCTAssertTrue(a[0].isActive)
         XCTAssertEqual(a[1].name, "agent run")
         XCTAssertEqual(a[1].detail, "07-info · PulseBar")
@@ -35,7 +35,7 @@ final class AgentMonitorTests: XCTestCase {
         XCTAssertEqual(a[0].detail, "boşta")
         XCTAssertFalse(a[0].isActive)
         let waiting = AgentMonitor.parseProcesses(ps, subagents: 3)     // ana oturum subagent bekliyor
-        XCTAssertEqual(waiting[0].detail, "3 subagent")
+        XCTAssertEqual(waiting[0].detail, "3 görev")
         XCTAssertTrue(waiting[0].isActive)
     }
     func testActiveSubagents() throws {
@@ -67,7 +67,7 @@ final class AgentMonitorTests: XCTestCase {
         let out = "p12\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\np13\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\nf2\nn/private/tmp/claude-501/x/s/tasks/b2.output\nn/Users/u/.claude/projects/p/s/subagents/agent-a1.jsonl\nn/dev/ttys001\n"
         XCTAssertEqual(AgentMonitor.backgroundCommands(out), 2)
         let a = AgentMonitor.parseProcesses("1 0.0 01:00 claude\n", subagents: 1, commands: 2)
-        XCTAssertEqual(a.first?.detail, "1 subagent · 2 komut")
+        XCTAssertEqual(a.first?.detail, "3 görev")
     }
     func testProxyStats() throws {
         let now = Date(timeIntervalSince1970: 1_000_000)

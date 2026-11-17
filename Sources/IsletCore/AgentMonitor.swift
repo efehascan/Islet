@@ -117,8 +117,7 @@ public final class AgentMonitor {
         if claudeSessions > 0 {
             var parts: [String] = []
             if claudeBusy > 0 { parts.append("\(claudeBusy) çalışıyor") }
-            if subagents > 0 { parts.append("\(subagents) subagent") }
-            if commands > 0 { parts.append("\(commands) komut") }
+            if subagents + commands > 0 { parts.append("\(subagents + commands) görev") }
             let detail = parts.isEmpty ? "boşta" : parts.joined(separator: " · ")
             result.append(AgentActivity(id: "claude", kind: .claude, name: "Claude Code",
                                         detail: detail, isActive: claudeBusy > 0 || subagents > 0 || commands > 0))
