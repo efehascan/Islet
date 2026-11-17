@@ -41,10 +41,10 @@ final class IslandPanelController {
     /// Açılmak için farenin adanın üstünde kalması gereken süre: menü çubuğuna giderken
     /// üstünden geçmek adayı açmasın.
     static let openDelay: TimeInterval = 0.25
-    /// Kapanmak için farenin dışarıda kalması gereken süre: kenara kısa kaymalar kapatmasın.
-    static let closeDelay: TimeInterval = 0.5
-    /// Açıkken ada çevresine eklenen tolerans payı (pt).
-    static let margin: CGFloat = 12
+    /// Kapanma gecikmesi: fare adadan çıkınca hemen kapanır.
+    static let closeDelay: TimeInterval = 0
+    /// Açıkken ada çevresine eklenen tolerans payı (pt): yok, ada sınırında kapanır.
+    static let margin: CGFloat = 0
     private var insideSince: Date?
     private var outsideSince: Date?
 
@@ -136,9 +136,9 @@ final class IslandPanelController {
             step(onIsland, 0.1); expect(false, "üstünden geçiş (0,1 sn) açmamalı")
             step(away, 0.1)
             step(onIsland, 0.4); expect(true, "0,4 sn üstünde kalınca açılmalı")
-            step(justOutside, 0.6); expect(true, "kenarın 6 pt dışı tolerans içinde")
-            step(away, 0.2); expect(true, "0,2 sn dışarıda kapanmamalı")
-            step(away, 0.6); expect(false, "0,8 sn dışarıda kapanmalı")
+            step(justOutside, 0); expect(false, "kenarın 6 pt dışına çıkınca hemen kapanmalı")
+            step(onIsland, 0.4); expect(true, "tekrar 0,4 sn üstünde kalınca açılmalı")
+            step(away, 0); expect(false, "uzağa çıkınca hemen kapanmalı")
             step(below, 0.6); expect(false, "kapalıyken alt bölge açmamalı")
             for i in 0..<6 {                                     // gerçek animasyonla aç/kapa (çökme kontrolü)
                 step(i % 2 == 0 ? onIsland : away, 0.7)
