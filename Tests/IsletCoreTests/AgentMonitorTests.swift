@@ -15,10 +15,10 @@ final class AgentMonitorTests: XCTestCase {
           105   0.0    00:01 /bin/zsh -l
           106   0.0    00:05 grep claude
         """
-        let a = AgentMonitor.parseProcesses(ps)
+        let a = AgentMonitor.parseProcesses(ps, subagents: 2)
         XCTAssertEqual(a.map(\.kind), [.claude, .agentRun, .opencode])
         XCTAssertEqual(a[0].name, "Claude Code")
-        XCTAssertEqual(a[0].detail, "1 çalışıyor · 2 açık")
+        XCTAssertEqual(a[0].detail, "1 çalışıyor · 2 subagent")
         XCTAssertTrue(a[0].isActive)
         XCTAssertEqual(a[1].name, "agent run")
         XCTAssertEqual(a[1].detail, "07-info · PulseBar")
@@ -32,8 +32,29 @@ final class AgentMonitorTests: XCTestCase {
         """
         let a = AgentMonitor.parseProcesses(ps)
         XCTAssertEqual(a.map(\.kind), [.claude])
-        XCTAssertEqual(a[0].detail, "1 açık, boşta")
+        XCTAssertEqual(a[0].detail, "boşta")
         XCTAssertFalse(a[0].isActive)
+        let waiting = AgentMonitor.parseProcesses(ps, subagents: 3)     // ana oturum subagent bekliyor
+        XCTAssertEqual(waiting[0].detail, "3 subagent")
+        XCTAssertTrue(waiting[0].isActive)
+    }
+    func testActiveSubagents() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("islet-sub-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func write(_ path: String, age: TimeInterval) throws {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("{}".utf8).write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path)
+        }
+        try write("p1/s1/subagents/agent-a.jsonl", age: 5)
+        try write("p1/s1/subagents/agent-a.meta.json", age: 5)      // kayıt değil
+        try write("p1/s2/subagents/agent-b.jsonl", age: 30)
+        try write("p2/s3/subagents/agent-c.jsonl", age: 600)        // bitmiş
+        try write("p2/s3.jsonl", age: 1)                            // ana oturum kaydı
+        XCTAssertEqual(AgentMonitor.activeSubagents(in: root, now: now), 2)
+        XCTAssertEqual(AgentMonitor.activeSubagents(in: root.appendingPathComponent("yok"), now: now), 0)
     }
     func testProxyStats() throws {
         let now = Date(timeIntervalSince1970: 1_000_000)

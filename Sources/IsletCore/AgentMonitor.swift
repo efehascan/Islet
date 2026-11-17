@@ -5,14 +5,18 @@ private enum AgentMonitorError: Error { case noData }
 /// Görev: çalışan ajanları (süreçler + proxy istatistiği) bul.
 public final class AgentMonitor {
     private let proxyURL: URL
-    public init(proxyURL: URL = URL(string: "http://localhost:11435/stats")!) {
+    /// Claude Code oturum kayıtlarının kökü; subagent kayıtları `<proje>/<oturum>/subagents/*.jsonl`
+    private let projectsRoot: URL
+    public init(proxyURL: URL = URL(string: "http://localhost:11435/stats")!,
+                projectsRoot: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")) {
         self.proxyURL = proxyURL
+        self.projectsRoot = projectsRoot
     }
 
     public func sample() async -> [AgentActivity] {
         var result: [AgentActivity] = []
         result.append(contentsOf: proxyStats())
-        result.append(contentsOf: AgentMonitor.parseProcesses(runPs()))
+        result.append(contentsOf: AgentMonitor.parseProcesses(runPs(), subagents: AgentMonitor.activeSubagents(in: projectsRoot, now: Date())))
         return result
     }
 
@@ -26,8 +30,31 @@ public final class AgentMonitor {
         return (path.trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
     }
 
-    /// `ps -axo pid=,pcpu=,etime=,command=` çıktısından ajan süreçleri
-    public static func parseProcesses(_ psOutput: String) -> [AgentActivity] {
+    /// Subagent kaydı bu kadar saniye içinde güncellendiyse subagent açık (çalışıyor) sayılır.
+    static let subagentWindow: TimeInterval = 60
+
+    /// Açık subagent sayısı. Subagent'lar ayrı süreç değildir (ana oturumun içinde koşar); her biri
+    /// `<kök>/<proje>/<oturum>/subagents/agent-*.jsonl` kaydına yazar. Son `subagentWindow` saniyede
+    /// güncellenen kayıtlar sayılır.
+    public static func activeSubagents(in root: URL, now: Date) -> Int {
+        let fm = FileManager.default
+        var count = 0
+        for project in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] {
+            for session in (try? fm.contentsOfDirectory(at: project, includingPropertiesForKeys: nil)) ?? [] {
+                let dir = session.appendingPathComponent("subagents")
+                let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+                for file in files where file.pathExtension == "jsonl" {
+                    guard let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                    else { continue }
+                    if now.timeIntervalSince(date) <= subagentWindow { count += 1 }
+                }
+            }
+        }
+        return count
+    }
+
+    /// `ps -axo pid=,pcpu=,etime=,command=` çıktısından ajan süreçleri; `subagents`: açık subagent sayısı
+    public static func parseProcesses(_ psOutput: String, subagents: Int = 0) -> [AgentActivity] {
         var claudeSessions = 0
         var claudeBusy = 0
         var agentRuns: [AgentActivity] = []
@@ -64,9 +91,12 @@ public final class AgentMonitor {
 
         var result: [AgentActivity] = []
         if claudeSessions > 0 {
-            let detail = claudeBusy > 0 ? "\(claudeBusy) çalışıyor · \(claudeSessions) açık" : "\(claudeSessions) açık, boşta"
+            var parts: [String] = []
+            if claudeBusy > 0 { parts.append("\(claudeBusy) çalışıyor") }
+            if subagents > 0 { parts.append("\(subagents) subagent") }
+            let detail = parts.isEmpty ? "boşta" : parts.joined(separator: " · ")
             result.append(AgentActivity(id: "claude", kind: .claude, name: "Claude Code",
-                                        detail: detail, isActive: claudeBusy > 0))
+                                        detail: detail, isActive: claudeBusy > 0 || subagents > 0))
         }
         result.append(contentsOf: agentRuns)
         if opencodeCount > 0 {
