@@ -42,19 +42,32 @@ final class AgentMonitorTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("islet-sub-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let now = Date(timeIntervalSince1970: 1_000_000)
-        func write(_ path: String, age: TimeInterval) throws {
+        func write(_ path: String, age: TimeInterval, _ body: String = "{}") throws {
             let url = root.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data("{}".utf8).write(to: url)
+            try Data(body.utf8).write(to: url)
             try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path)
         }
+        let bg = #"{"requestShape":"background"}"#
         try write("p1/s1/subagents/agent-a.jsonl", age: 5)
-        try write("p1/s1/subagents/agent-a.meta.json", age: 5)      // kayıt değil
-        try write("p1/s2/subagents/agent-b.jsonl", age: 30)
-        try write("p2/s3/subagents/agent-c.jsonl", age: 600)        // bitmiş
-        try write("p2/s3.jsonl", age: 1)                            // ana oturum kaydı
+        try write("p1/s1/subagents/agent-a.meta.json", age: 5, bg)
+        try write("p1/s1/subagents/agent-b.jsonl", age: 900)                       // uzun düşünüyor, hâlâ açık
+        try write("p1/s1/subagents/agent-b.meta.json", age: 900, bg)
+        try write("p1/s1/subagents/agent-c.jsonl", age: 5)                         // bitti: notu var
+        try write("p1/s1/subagents/agent-c.meta.json", age: 5, bg)
+        try write("p1/s1.jsonl", age: 1, #"{"text":"<task-id>c</task-id>"}"#)
+        try write("p1/s1/subagents/agent-d.jsonl", age: 5)                         // ön planda (iç içe)
+        try write("p1/s1/subagents/agent-d.meta.json", age: 5, #"{"requestShape":"foreground"}"#)
+        try write("p2/s3/subagents/agent-e.jsonl", age: 7200)                      // eski, notsuz
+        try write("p2/s3/subagents/agent-e.meta.json", age: 7200, bg)
         XCTAssertEqual(AgentMonitor.activeSubagents(in: root, now: now), 2)
         XCTAssertEqual(AgentMonitor.activeSubagents(in: root.appendingPathComponent("yok"), now: now), 0)
+    }
+    func testBackgroundCommands() {
+        let out = "p12\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\np13\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\nf2\nn/private/tmp/claude-501/x/s/tasks/b2.output\nn/Users/u/.claude/projects/p/s/subagents/agent-a1.jsonl\nn/dev/ttys001\n"
+        XCTAssertEqual(AgentMonitor.backgroundCommands(out), 2)
+        let a = AgentMonitor.parseProcesses("1 0.0 01:00 claude\n", subagents: 1, commands: 2)
+        XCTAssertEqual(a.first?.detail, "1 subagent · 2 komut")
     }
     func testProxyStats() throws {
         let now = Date(timeIntervalSince1970: 1_000_000)

@@ -16,7 +16,9 @@ public final class AgentMonitor {
     public func sample() async -> [AgentActivity] {
         var result: [AgentActivity] = []
         result.append(contentsOf: proxyStats())
-        result.append(contentsOf: AgentMonitor.parseProcesses(runPs(), subagents: AgentMonitor.activeSubagents(in: projectsRoot, now: Date())))
+        result.append(contentsOf: AgentMonitor.parseProcesses(run("/bin/ps", ["-axo", "pid=,pcpu=,etime=,command="]),
+                                                         subagents: AgentMonitor.activeSubagents(in: projectsRoot, now: Date()),
+                                                         commands: AgentMonitor.backgroundCommands(run("/usr/sbin/lsof", ["-nP", "-w", "-a", "-d", "1,2", "-Fn"]))))
         return result
     }
 
@@ -30,12 +32,13 @@ public final class AgentMonitor {
         return (path.trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
     }
 
-    /// Subagent kaydı bu kadar saniye içinde güncellendiyse subagent açık (çalışıyor) sayılır.
-    static let subagentWindow: TimeInterval = 60
+    /// Bu kadar süredir yazılmayan subagent kaydı (bitiş notu düşmese de) kapanmış sayılır.
+    static let subagentStale: TimeInterval = 3600
 
-    /// Açık subagent sayısı. Subagent'lar ayrı süreç değildir (ana oturumun içinde koşar); her biri
-    /// `<kök>/<proje>/<oturum>/subagents/agent-*.jsonl` kaydına yazar. Son `subagentWindow` saniyede
-    /// güncellenen kayıtlar sayılır.
+    /// Arka planda çalışan subagent sayısı (Claude uygulamasındaki "Arka plan görevleri" ile aynı tanım).
+    /// Her subagent `<kök>/<proje>/<oturum>/subagents/agent-<id>.jsonl` kaydına yazar; `.meta.json`
+    /// `requestShape: "background"` ise arka plandadır. Bitince ana oturum kaydına
+    /// `<task-id><id></task-id>` notu düşer; notu olmayan ve son bir saatte yazılmış olanlar çalışıyor.
     public static func activeSubagents(in root: URL, now: Date) -> Int {
         let fm = FileManager.default
         var count = 0
@@ -43,18 +46,39 @@ public final class AgentMonitor {
             for session in (try? fm.contentsOfDirectory(at: project, includingPropertiesForKeys: nil)) ?? [] {
                 let dir = session.appendingPathComponent("subagents")
                 let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+                var parentLog: String?
                 for file in files where file.pathExtension == "jsonl" {
-                    guard let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                    else { continue }
-                    if now.timeIntervalSince(date) <= subagentWindow { count += 1 }
+                    guard let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                          now.timeIntervalSince(date) <= subagentStale else { continue }
+                    let base = file.deletingPathExtension()
+                    guard let meta = try? Data(contentsOf: base.appendingPathExtension("meta.json")),
+                          let json = try? JSONSerialization.jsonObject(with: meta) as? [String: Any],
+                          json["requestShape"] as? String == "background" else { continue }
+                    let id = String(base.lastPathComponent.dropFirst("agent-".count))
+                    if parentLog == nil {
+                        parentLog = (try? String(contentsOf: session.appendingPathExtension("jsonl"), encoding: .utf8)) ?? ""
+                    }
+                    if parentLog?.contains("<task-id>\(id)</task-id>") == true { continue }
+                    count += 1
                 }
             }
         }
         return count
     }
 
+    /// `lsof -Fn` çıktısından arka planda çalışan komut sayısı: Claude'un arka plan komutları
+    /// çıktısını `.../tasks/<id>.output` dosyasına yazar; dosya açıkken komut sürüyor demektir.
+    public static func backgroundCommands(_ lsofOutput: String) -> Int {
+        var files = Set<Substring>()
+        for line in lsofOutput.split(separator: "\n") where line.hasPrefix("n") && line.hasSuffix(".output") {
+            let name = line.split(separator: "/").last ?? ""
+            if line.contains("/tasks/") && name.first == "b" { files.insert(line) }
+        }
+        return files.count
+    }
+
     /// `ps -axo pid=,pcpu=,etime=,command=` çıktısından ajan süreçleri; `subagents`: açık subagent sayısı
-    public static func parseProcesses(_ psOutput: String, subagents: Int = 0) -> [AgentActivity] {
+    public static func parseProcesses(_ psOutput: String, subagents: Int = 0, commands: Int = 0) -> [AgentActivity] {
         var claudeSessions = 0
         var claudeBusy = 0
         var agentRuns: [AgentActivity] = []
@@ -94,9 +118,10 @@ public final class AgentMonitor {
             var parts: [String] = []
             if claudeBusy > 0 { parts.append("\(claudeBusy) çalışıyor") }
             if subagents > 0 { parts.append("\(subagents) subagent") }
+            if commands > 0 { parts.append("\(commands) komut") }
             let detail = parts.isEmpty ? "boşta" : parts.joined(separator: " · ")
             result.append(AgentActivity(id: "claude", kind: .claude, name: "Claude Code",
-                                        detail: detail, isActive: claudeBusy > 0 || subagents > 0))
+                                        detail: detail, isActive: claudeBusy > 0 || subagents > 0 || commands > 0))
         }
         result.append(contentsOf: agentRuns)
         if opencodeCount > 0 {
@@ -159,10 +184,10 @@ public final class AgentMonitor {
         return result
     }
 
-    private func runPs() -> String {
+    private func run(_ path: String, _ arguments: [String]) -> String {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-axo", "pid=,pcpu=,etime=,command="]
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
