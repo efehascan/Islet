@@ -7,6 +7,7 @@ public final class AgentMonitor {
     private let proxyURL: URL
     /// Claude Code oturum kayıtlarının kökü; subagent kayıtları `<proje>/<oturum>/subagents/*.jsonl`
     private let projectsRoot: URL
+    private let notes = TaskNoteIndex()
     public init(proxyURL: URL = URL(string: "http://localhost:11435/stats")!,
                 projectsRoot: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")) {
         self.proxyURL = proxyURL
@@ -17,8 +18,8 @@ public final class AgentMonitor {
         var result: [AgentActivity] = []
         result.append(contentsOf: proxyStats())
         result.append(contentsOf: AgentMonitor.parseProcesses(run("/bin/ps", ["-axo", "pid=,pcpu=,etime=,command="]),
-                                                         subagents: AgentMonitor.activeSubagents(in: projectsRoot, now: Date()),
-                                                         commands: AgentMonitor.backgroundCommands(run("/usr/sbin/lsof", ["-nP", "-w", "-a", "-d", "1,2", "-Fn"]))))
+                                                         subagents: AgentMonitor.activeSubagents(in: projectsRoot, now: Date(), notes: notes),
+                                                         commands: AgentMonitor.backgroundCommands(run("/usr/sbin/lsof", ["-nP", "-w", "-a", "-c", "zsh", "-c", "bash", "-c", "sh", "-d", "1,2", "-Fn"]))))
         return result
     }
 
@@ -39,14 +40,13 @@ public final class AgentMonitor {
     /// Her subagent `<kök>/<proje>/<oturum>/subagents/agent-<id>.jsonl` kaydına yazar; `.meta.json`
     /// `requestShape: "background"` ise arka plandadır. Bitince ana oturum kaydına
     /// `<task-id><id></task-id>` notu düşer; notu olmayan ve son bir saatte yazılmış olanlar çalışıyor.
-    public static func activeSubagents(in root: URL, now: Date) -> Int {
+    public static func activeSubagents(in root: URL, now: Date, notes: TaskNoteIndex = TaskNoteIndex()) -> Int {
         let fm = FileManager.default
         var count = 0
         for project in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] {
             for session in (try? fm.contentsOfDirectory(at: project, includingPropertiesForKeys: nil)) ?? [] {
                 let dir = session.appendingPathComponent("subagents")
                 let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-                var parentLog: String?
                 for file in files where file.pathExtension == "jsonl" {
                     guard let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                           now.timeIntervalSince(date) <= subagentStale else { continue }
@@ -55,10 +55,7 @@ public final class AgentMonitor {
                           let json = try? JSONSerialization.jsonObject(with: meta) as? [String: Any],
                           json["requestShape"] as? String == "background" else { continue }
                     let id = String(base.lastPathComponent.dropFirst("agent-".count))
-                    if parentLog == nil {
-                        parentLog = (try? String(contentsOf: session.appendingPathExtension("jsonl"), encoding: .utf8)) ?? ""
-                    }
-                    if parentLog?.contains("<task-id>\(id)</task-id>") == true { continue }
+                    if notes.finished(in: session.appendingPathExtension("jsonl")).contains(id) { continue }
                     count += 1
                 }
             }
@@ -209,5 +206,41 @@ public final class AgentMonitor {
             return nil
         }
         return String(fields[idx + 1])
+    }
+}
+
+/// Ana oturum kayıtlarındaki `<task-id>…</task-id>` bitiş notları. Kayıtlar yüzlerce MB olabilir;
+/// her dosya için okunan konum saklanır, sonraki örneklemelerde yalnızca eklenen kısım okunur.
+public final class TaskNoteIndex: @unchecked Sendable {
+    private var offsets: [URL: UInt64] = [:]
+    private var ids: [URL: Set<String>] = [:]
+    private var tails: [URL: Data] = [:]
+    private let lock = NSLock()
+    public init() {}
+
+    public func finished(in log: URL) -> Set<String> {
+        lock.lock(); defer { lock.unlock() }
+        guard let handle = try? FileHandle(forReadingFrom: log) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        var offset = offsets[log] ?? 0
+        if size < offset { offset = 0; ids[log] = []; tails[log] = nil }   // dosya kısaldı: baştan
+        guard size > offset, (try? handle.seek(toOffset: offset)) != nil else { return ids[log] ?? [] }
+        var found = ids[log] ?? []
+        var carry = tails[log] ?? Data()
+        let open = Data("<task-id>".utf8), close = Data("</task-id>".utf8)
+        while let chunk = try? handle.read(upToCount: 4 << 20), !chunk.isEmpty {
+            var data = carry + chunk
+            var start = data.startIndex
+            while let a = data.range(of: open, in: start..<data.endIndex) {
+                guard let b = data.range(of: close, in: a.upperBound..<data.endIndex) else { break }
+                if let id = String(data: data[a.upperBound..<b.lowerBound], encoding: .utf8), id.count < 64 { found.insert(id) }
+                start = b.upperBound
+            }
+            data = data[start...]
+            carry = Data(data.suffix(64))
+        }
+        offsets[log] = size; ids[log] = found; tails[log] = carry
+        return found
     }
 }

@@ -59,13 +59,23 @@ public final class IslandStore {
 
     // MARK: - Tazeleme
 
+    private var refreshing = false
+    private var lastAgentSample = Date.distantPast
+
     public func refresh() async {
+        guard !refreshing else { return }              // önceki tur bitmeden yenisini başlatma
+        refreshing = true
+        defer { refreshing = false }
         let provider = nowPlaying
         let info = await Task.detached {
             provider.current()
         }.value
         self.media = info
-        self.agents = await agentMonitor.sample()
+        if Date().timeIntervalSince(lastAgentSample) >= 5 {   // ajanlar 5 sn'de bir yeter
+            lastAgentSample = Date()
+            let monitor = agentMonitor
+            self.agents = await Task.detached { await monitor.sample() }.value
+        }
     }
 
     // MARK: - Dosya bırakma

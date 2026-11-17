@@ -63,6 +63,15 @@ final class AgentMonitorTests: XCTestCase {
         XCTAssertEqual(AgentMonitor.activeSubagents(in: root, now: now), 2)
         XCTAssertEqual(AgentMonitor.activeSubagents(in: root.appendingPathComponent("yok"), now: now), 0)
     }
+    func testTaskNoteIndexReadsOnlyAppended() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("islet-notes-" + UUID().uuidString + ".jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("x<task-id>a1</task-id>\n<task-".utf8).write(to: url)
+        let index = TaskNoteIndex()
+        XCTAssertEqual(index.finished(in: url), ["a1"])
+        let h = try FileHandle(forWritingTo: url); try h.seekToEnd(); try h.write(contentsOf: Data("id>b2</task-id>\n".utf8)); try h.close()
+        XCTAssertEqual(index.finished(in: url), ["a1", "b2"])     // bölünmüş not birleşir
+    }
     func testBackgroundCommands() {
         let out = "p12\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\np13\nf1\nn/private/tmp/claude-501/x/s/tasks/b1.output\nf2\nn/private/tmp/claude-501/x/s/tasks/b2.output\nn/Users/u/.claude/projects/p/s/subagents/agent-a1.jsonl\nn/dev/ttys001\n"
         XCTAssertEqual(AgentMonitor.backgroundCommands(out), 2)
