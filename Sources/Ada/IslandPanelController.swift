@@ -36,6 +36,17 @@ final class IslandPanelController {
     private var collapsed = CGSize(width: 220, height: 32)
     /// Fare konumu (ekran koordinatı). Testte sahte konum verilebilir.
     var mouseLocation: () -> CGPoint = { NSEvent.mouseLocation }
+    /// Saat. Testte sahte saat verilir (gerçek bekleme yok).
+    var now: () -> Date = { Date() }
+    /// Açılmak için farenin adanın üstünde kalması gereken süre: menü çubuğuna giderken
+    /// üstünden geçmek adayı açmasın.
+    static let openDelay: TimeInterval = 0.25
+    /// Kapanmak için farenin dışarıda kalması gereken süre: kenara kısa kaymalar kapatmasın.
+    static let closeDelay: TimeInterval = 0.5
+    /// Açıkken ada çevresine eklenen tolerans payı (pt).
+    static let margin: CGFloat = 12
+    private var insideSince: Date?
+    private var outsideSince: Date?
 
     init(store: IslandStore) {
         self.store = store
@@ -78,16 +89,20 @@ final class IslandPanelController {
     /// Adanın şu anki dikdörtgeni (ekran koordinatı): kapalıyken hap, açıkken bütün pencere.
     private var islandRect: NSRect {
         let f = panel.frame
-        if store.isExpanded { return f }
+        if store.isExpanded { return f.insetBy(dx: -Self.margin, dy: -Self.margin) }
         return NSRect(x: f.midX - collapsed.width / 2, y: f.maxY - collapsed.height, width: collapsed.width, height: collapsed.height)
     }
 
     /// Fare adanın üstündeyse açar ve olayları kabul eder; değilse kapatır ve olayları alttakilere bırakır.
     func tick() {
+        let t = now()
         let inside = islandRect.contains(mouseLocation())
+        if inside { insideSince = insideSince ?? t; outsideSince = nil } else { outsideSince = outsideSince ?? t; insideSince = nil }
         var keepOpen = false
         if case .running = store.status { keepOpen = true }       // dönüştürme sürerken kapanma
-        let shouldExpand = inside || keepOpen
+        var shouldExpand = store.isExpanded
+        if !store.isExpanded, let since = insideSince, t.timeIntervalSince(since) >= Self.openDelay { shouldExpand = true }
+        if store.isExpanded, !keepOpen, let since = outsideSince, t.timeIntervalSince(since) >= Self.closeDelay { shouldExpand = false }
         if store.isExpanded != shouldExpand { store.isExpanded = shouldExpand }
         let ignore = !shouldExpand
         if panel.ignoresMouseEvents != ignore { panel.ignoresMouseEvents = ignore }
@@ -100,34 +115,47 @@ final class IslandPanelController {
         timer?.invalidate()
         Task { @MainActor in
             var failures: [String] = []
+            var clock = Date(timeIntervalSince1970: 0)
+            now = { clock }
+            @MainActor func step(_ point: CGPoint, _ seconds: TimeInterval) {
+                mouseLocation = { point }
+                var left = seconds
+                repeat { tick(); clock += 0.1; left -= 0.1 } while left > 0
+                tick()
+            }
+            @MainActor func expect(_ open: Bool, _ what: String) {
+                if store.isExpanded != open { failures.append("\(what): isExpanded \(store.isExpanded)") }
+                if panel.ignoresMouseEvents == open { failures.append("\(what): ignoresMouseEvents \(panel.ignoresMouseEvents)") }
+            }
             let frame0 = panel.frame
             let onIsland = CGPoint(x: frame0.midX, y: frame0.maxY - 5)
-            let below = CGPoint(x: frame0.midX, y: frame0.minY + 20)       // kapalıyken saydam bölge
+            let below = CGPoint(x: frame0.midX, y: frame0.minY + 20)
+            let justOutside = CGPoint(x: frame0.maxX + 6, y: frame0.midY)
             let away = CGPoint(x: frame0.minX - 300, y: frame0.minY - 300)
-            try? await Task.sleep(for: .milliseconds(2500))                 // ajanlar ve medya yüklensin
-            for i in 0..<10 {
-                mouseLocation = { i % 2 == 0 ? onIsland : away }
-                tick()
-                if store.isExpanded != (i % 2 == 0) { failures.append("tur \(i): isExpanded \(store.isExpanded)") }
-                if panel.ignoresMouseEvents != (i % 2 != 0) { failures.append("tur \(i): ignoresMouseEvents \(panel.ignoresMouseEvents)") }
-                try? await Task.sleep(for: .milliseconds(450))
+            try? await Task.sleep(for: .milliseconds(2500))     // ajanlar ve medya gerçekten yüklensin
+            step(onIsland, 0.1); expect(false, "üstünden geçiş (0,1 sn) açmamalı")
+            step(away, 0.1)
+            step(onIsland, 0.4); expect(true, "0,4 sn üstünde kalınca açılmalı")
+            step(justOutside, 0.6); expect(true, "kenarın 6 pt dışı tolerans içinde")
+            step(away, 0.2); expect(true, "0,2 sn dışarıda kapanmamalı")
+            step(away, 0.6); expect(false, "0,8 sn dışarıda kapanmalı")
+            step(below, 0.6); expect(false, "kapalıyken alt bölge açmamalı")
+            for i in 0..<6 {                                     // gerçek animasyonla aç/kapa (çökme kontrolü)
+                step(i % 2 == 0 ? onIsland : away, 0.7)
+                try? await Task.sleep(for: .milliseconds(400))
             }
-            mouseLocation = { below }; tick()
-            if store.isExpanded { failures.append("kapalıyken alt bölge adayı açtı") }
-            mouseLocation = { onIsland }; tick()
+            step(onIsland, 0.4)
             let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ada-selftest.txt")
             try? "selftest".write(to: tmp, atomically: true, encoding: .utf8)
             store.handleDrop(tmp)
             try? await Task.sleep(for: .milliseconds(700))
             if store.options.isEmpty { failures.append("bırakılan dosya için seçenek yok") }
-            mouseLocation = { below }; tick()                               // açıkken alt bölge adanın içi
-            if !store.isExpanded { failures.append("açıkken ada içinde kapandı") }
             store.clearDrop()
-            mouseLocation = { away }; tick()
-            try? await Task.sleep(for: .milliseconds(700))
+            step(away, 0.8)
+            try? await Task.sleep(for: .milliseconds(500))
             if panel.frame != frame0 { failures.append("pencere boyutu değişti: \(panel.frame)") }
             if failures.isEmpty {
-                print("selftest: OK · ajan \(store.agents.count) · pencere \(Int(frame0.width))×\(Int(frame0.height)) sabit")
+                print("selftest: OK · ajan \(store.agents.count) · açılma \(Self.openDelay) sn, kapanma \(Self.closeDelay) sn")
                 exit(0)
             }
             print("selftest: BAŞARISIZ\n" + failures.joined(separator: "\n"))
