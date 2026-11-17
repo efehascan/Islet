@@ -16,51 +16,62 @@ public final class AgentMonitor {
         return result
     }
 
-    /// `ps -axo pid=,etime=,command=` çıktısından ajan süreçleri
+    /// Bir Claude Code oturumunu "çalışıyor" saymak için gereken CPU kullanımı (%)
+    static let busyCPU = 1.0
+
+    /// Komut satırındaki çalıştırılabilir dosyanın adı: ilk " -" bayrağına kadar olan yolun son parçası.
+    /// (Yolda boşluk olabilir: "Application Support". Argümanlardaki yollar sayılmaz.)
+    static func executableName(_ command: String) -> String {
+        let path = command.range(of: " -").map { String(command[..<$0.lowerBound]) } ?? command
+        return (path.trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent
+    }
+
+    /// `ps -axo pid=,pcpu=,etime=,command=` çıktısından ajan süreçleri
     public static func parseProcesses(_ psOutput: String) -> [AgentActivity] {
-        var claudePids: [Int] = []
+        var claudeSessions = 0
+        var claudeBusy = 0
         var agentRuns: [AgentActivity] = []
-        var opencodePids: [Int] = []
+        var opencodeCount = 0
 
         for line in psOutput.split(whereSeparator: { $0 == "\n" }) {
-            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-            guard fields.count == 3 else { continue }
-            let pid = Int(fields[0])
-            let command = fields[2]
-            if command.contains("grep") { continue }
+            let fields = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true)
+            guard fields.count == 4, let pid = Int(fields[0]) else { continue }
+            let cpu = Double(fields[1].replacingOccurrences(of: ",", with: ".")) ?? 0
+            let command = String(fields[3])
+            let exe = executableName(command)
 
-            if command.contains("/claude") && !command.contains("Claude Helper")
-                && !command.contains("claude-code-guide") {
-                if let pid { claudePids.append(pid) }
+            if exe == "claude" {
+                // Sadece claude ikilisinin kendisi; onu başlatan sarmalayıcılar (disclaimer) ve
+                // yolunda "claude" geçen kabuklar sayılmaz.
+                claudeSessions += 1
+                if cpu >= busyCPU { claudeBusy += 1 }
             } else if command.contains("agent_run.py") {
-                if let pid {
-                    var detail = ""
-                    if let taskFile = argument("task", in: String(command)) {
-                        let base = ((taskFile as NSString).lastPathComponent
-                                    as NSString).deletingPathExtension
-                        detail = base
-                    }
-                    if let repo = argument("repo", in: String(command)) {
-                        let folder = (repo as NSString).lastPathComponent
-                        detail += detail.isEmpty ? folder : " · \(folder)"
-                    }
-                    agentRuns.append(AgentActivity(id: "run-\(pid)", kind: .agentRun,
-                                                  name: "agent run", detail: detail, isActive: true))
+                var detail = ""
+                if let taskFile = argument("task", in: command) {
+                    detail = ((taskFile as NSString).lastPathComponent as NSString).deletingPathExtension
                 }
-            } else if command.contains("opencode") {
-                if let pid { opencodePids.append(pid) }
+                if let repo = argument("repo", in: command) {
+                    let folder = (repo as NSString).lastPathComponent
+                    detail += detail.isEmpty ? folder : " · \(folder)"
+                }
+                agentRuns.append(AgentActivity(id: "run-\(pid)", kind: .agentRun,
+                                              name: "agent run", detail: detail, isActive: true))
+            } else if exe.hasPrefix("opencode") && !command.contains(" serve") {
+                // Arka plan servisi (`opencode-cli serve`) ajan değildir; sadece açık oturumlar.
+                opencodeCount += 1
             }
         }
 
         var result: [AgentActivity] = []
-        if !claudePids.isEmpty {
+        if claudeSessions > 0 {
+            let detail = claudeBusy > 0 ? "\(claudeBusy) çalışıyor · \(claudeSessions) açık" : "\(claudeSessions) açık, boşta"
             result.append(AgentActivity(id: "claude", kind: .claude, name: "Claude Code",
-                                        detail: "\(claudePids.count) oturum", isActive: true))
+                                        detail: detail, isActive: claudeBusy > 0))
         }
         result.append(contentsOf: agentRuns)
-        if !opencodePids.isEmpty {
+        if opencodeCount > 0 {
             result.append(AgentActivity(id: "opencode", kind: .opencode, name: "OpenCode",
-                                        detail: "\(opencodePids.count) süreç", isActive: true))
+                                        detail: "\(opencodeCount) oturum", isActive: true))
         }
         return result
     }
@@ -121,7 +132,7 @@ public final class AgentMonitor {
     private func runPs() -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-axo", "pid=,etime=,command="]
+        process.arguments = ["-axo", "pid=,pcpu=,etime=,command="]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
