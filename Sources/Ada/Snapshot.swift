@@ -12,7 +12,7 @@ enum Snapshot {
         let store = IslandStore()
         store.isExpanded = true
         Task { @MainActor in
-            await store.refresh()
+            if args.contains("--live") { await store.refresh() }   // varsayılan: medya/ajan okumadan, sadece yerleşim
             if let f = args.firstIndex(of: "--file"), f + 1 < args.count { store.handleDrop(URL(fileURLWithPath: args[f + 1])) }
             let view = IslandView(store: store)
                 .frame(width: Theme.expandedSize.width, height: Theme.expandedSize.height)

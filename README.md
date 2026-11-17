@@ -9,6 +9,9 @@
 swift run Ada
 scripts/make-app.sh      # dist/Ada.app
 scripts/check.sh         # derleme + testler
+.build/debug/Ada --snapshot ada.png [--file örnek.docx] [--live]   # görsel kontrol
 ```
 
 Vardiya Mimarisi ile geliştirildi: Claude iskeleti yazdı, Qwen 3.8 (local) dosyaları doldurdu, kontroller ve Gemma incelemesi doğruladı.
+
+İlk açılışta Spotify ya da Müzik çalıyorsa macOS, Ada'nın bu uygulamaları kontrol etmesi için izin ister (Sistem Ayarları → Gizlilik ve Güvenlik → Otomasyon).

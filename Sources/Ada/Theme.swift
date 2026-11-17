@@ -10,7 +10,7 @@ enum Theme {
     static let qwen = Color(red: 0.30, green: 0.70, blue: 0.76)
     static let claude = Color(red: 0.89, green: 0.56, blue: 0.30)
     static let gemma = Color(red: 0.66, green: 0.52, blue: 0.90)
-    static let expandedSize = CGSize(width: 520, height: 230)
+    static let expandedSize = CGSize(width: 520, height: 190)
     static let cornerCollapsed: CGFloat = 14
     static let cornerExpanded: CGFloat = 28
 

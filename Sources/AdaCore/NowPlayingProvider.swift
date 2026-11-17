@@ -1,11 +1,16 @@
 import Foundation
+import AppKit
 /// Görev: Spotify ve Müzik'ten şu an çalan parçayı AppleScript ile oku, komut gönder.
 public final class NowPlayingProvider {
     public init() {}
 
     /// Önce Spotify, sonra Music; çalışan uygulama yoksa ya da çalmıyorsa nil.
     public func current() -> NowPlayingInfo? {
-        for app in ["Spotify", "Music"] {
+        // Uygulama açık değilse AppleScript hiç çalıştırılmaz: izin penceresi çıkmaz, uygulama
+        // açılmaz, 2 saniyelik yenilemede boşuna beklenmez.
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        let apps: [(name: String, bundle: String)] = [("Spotify", "com.spotify.client"), ("Music", "com.apple.Music")]
+        for (app, bundle) in apps where running.contains(bundle) {
             if let info = runScript(for: app) {
                 return info
             }
