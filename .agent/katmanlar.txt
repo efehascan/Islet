@@ -1,0 +1,2 @@
+# Çekirdek dönüştürmede AppKit (NSImage, NSWorkspace) kullanıyor; yalnızca SwiftUI yasak.
+Sources/IsletCore/ -> SwiftUI
